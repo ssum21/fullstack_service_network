@@ -48,3 +48,26 @@ func runUserManager(localIP, port string) {
 		rep.Send(zmq4.NewMsgString("ok")) // 간단히 ok 응답으로 수행 확인
 	}
 }
+
+// Relay Server (중계 서버)
+func runRelayServer(localIP, pubPort, pullPort string) {
+	pub := zmq4.NewPub(context.Background()) // PUB: 메시지 뿌리기용
+	defer pub.Close()
+	pub.Listen(fmt.Sprintf("tcp://%s:%s", localIP, pubPort))
+
+	pull := zmq4.NewPull(context.Background()) // PULL: 메시지 받기용
+	defer pull.Close()
+	pull.Listen(fmt.Sprintf("tcp://%s:%s", localIP, pullPort))
+
+	fmt.Printf("[Server] Relay 서버 활성화 (PUB:%s, PULL:%s)\n", pubPort, pullPort)
+
+	for {
+		msg, err := pull.Recv()
+		if err != nil { continue }
+		
+		content := string(msg.Bytes())
+		fmt.Printf("p2p-relay:<==> %s\n", content)
+		
+		pub.Send(zmq4.NewMsgString("RELAY:" + content)) // 모두에게 다시 쏘기
+	}
+}
