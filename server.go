@@ -25,3 +25,26 @@ func runBeaconServer(localIP, port string) {
 		pub.Send(zmq4.NewMsgString(msg))
 	}
 }
+
+// User Manager (유저 등록 요청 받기)
+func runUserManager(localIP, port string) {
+	rep := zmq4.NewRep(context.Background()) // REP 소켓 생성
+	defer rep.Close()
+
+	addr := fmt.Sprintf("tcp://%s:%s", localIP, port)
+	if err := rep.Listen(addr); err != nil {
+		fmt.Printf("UserDB Bind 실패: %v\n", err)
+		return
+	}
+	fmt.Printf("[Server] 유저 DB 활성화 (tcp://%s:%s)\n", localIP, port)
+
+	for {
+		msg, err := rep.Recv()
+		if err != nil { break }
+		
+		req := string(msg.Bytes())
+		fmt.Printf("[Server] 유저 등록 요청 받음: %s\n", req)
+		
+		rep.Send(zmq4.NewMsgString("ok")) // 간단히 ok 응답으로 수행 확인
+	}
+}
