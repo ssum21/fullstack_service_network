@@ -1,16 +1,13 @@
 package main
 
-// 파일 하나로 병합 진행 중
+// import 다 넣는다고 되는 게 아님
 
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net"
-	"os"
 	"strings"
 	"time"
-
 	"github.com/go-zeromq/zmq4"
 )
 
@@ -101,6 +98,40 @@ func runRelayServer(localIP, pubPort, pullPort string) {
 	}
 }
 
+func searchNameserver(ipMask, localIP, port string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	sub := zmq4.NewSub(ctx)
+	defer sub.Close()
+
+	// 기존 파이썬과 대응되도록 1~254 무차별 스캔
+	for i := 1; i < 255; i++ {
+		target := fmt.Sprintf("tcp://%s.%d:%s", ipMask, i, port)
+		sub.Dial(target)
+	}
+	sub.SetOption(zmq4.OptionSubscribe, "NAMESERVER")
+
+	msgChan := make(chan string)
+	go func() {
+		msg, err := sub.Recv()
+		if err == nil {
+			msgChan <- string(msg.Bytes())
+		}
+	}()
+
+	select {
+	case res := <-msgChan:
+		parts := strings.Split(res, ":")
+		if len(parts) >= 2 && parts[0] == "NAMESERVER" {
+			return parts[1]
+		}
+	case <-ctx.Done():
+		return ""
+	}
+	return ""
+}
+
 func main() {
     fmt.Println("ZMQ 더티 P2P 구현 프로젝트")
 	myIP := get_local_ip()
@@ -112,6 +143,9 @@ func main() {
 	go runBeaconServer(myIP, "5555")
 	go runUserManager(myIP, "5560")
 	go runRelayServer(myIP, "5570", "5580")
+
+	p2pServerIP := searchNameserver(mask, myIP, "5555")
+	fmt.Println("P2P Server IP:", p2pServerIP)
 
 	fmt.Println("서버가 실행 중입니당...")
 	// 무한루프 돌면서 서버 유지시켜야 한다는데 이유 찾아보기
