@@ -3,6 +3,7 @@ package main
 // import 다 넣는다고 되는 게 아님
 
 import (
+	"os"
 	"context"
 	"fmt"
 	"net"
@@ -136,18 +137,77 @@ func main() {
     fmt.Println("ZMQ 더티 P2P 구현 프로젝트")
 	myIP := get_local_ip()
     fmt.Println("My IP:", myIP)
+
+    userName := os.Args[1] // 커맨드 인자로 유저네임 받기
     
     mask := get_ip_mask(myIP)
     fmt.Println("IP Mask:", mask)
 
-	go runBeaconServer(myIP, "5555")
-	go runUserManager(myIP, "5560")
-	go runRelayServer(myIP, "5570", "5580")
+	portNameserver := "9001"
+    portChatPub    := "9002"
+    portChatColl   := "9003"
+    portSubscribe  := "9004"
 
-	p2pServerIP := searchNameserver(mask, myIP, "5555")
+	//go runBeaconServer(myIP, portNameserver)
+	//go runUserManager(myIP, portSubscribe)
+	//go runRelayServer(myIP, portChatPub, portChatColl)
+
+	p2pServerIP := searchNameserver(mask, myIP, portNameserver)
 	fmt.Println("P2P Server IP:", p2pServerIP)
 
-	fmt.Println("서버가 실행 중입니당...")
-	// 무한루프 돌면서 서버 유지시켜야 한다는데 이유 찾아보기
-	select {}
-}
+	if p2pServerIP == "" {
+        p2pServerIP = myIP
+        fmt.Println("p2p server가 없으니까 내가 서버가 됨.")
+
+        go runBeaconServer(myIP, portNameserver)
+        go runUserManager(myIP, portSubscribe)
+        go runRelayServer(myIP, portChatPub, portChatColl)
+        
+        time.Sleep(500 * time.Millisecond) 
+    } else {
+        fmt.Printf("p2p server found at %s. I am a Client.\n", p2pServerIP)
+    }
+
+	fmt.Println("서버가 실행 중입니다...")
+	req := zmq4.NewReq(context.Background())
+    defer req.Close()
+    req.Dial(fmt.Sprintf("tcp://%s:%s", p2pServerIP, portSubscribe))
+    req.Send(zmq4.NewMsgString(fmt.Sprintf("%s:%s", myIP, userName))) // IP:UserName 형식으로 전송
+    
+    if msg, err := req.Recv(); err == nil && string(msg.Bytes()) == "ok" { // 응답 대기
+        fmt.Println("p2p 서버에 유저 등록 완료")
+    } else {
+        fmt.Println("유저 등록 실패")
+    }
+    
+    // 받는 소켓 (SUB) -> Relay Server의 PUB 포트
+    sub := zmq4.NewSub(context.Background())
+    defer sub.Close()
+    sub.Dial(fmt.Sprintf("tcp://%s:%s", p2pServerIP, portChatPub))
+    sub.SetOption(zmq4.OptionSubscribe, "RELAY")
+
+    // 보내는 소켓 (PUSH) -> Relay Server의 PULL 포트(9003) 전송
+    push := zmq4.NewPush(context.Background())
+    defer push.Close()
+    push.Dial(fmt.Sprintf("tcp://%s:%s", p2pServerIP, portChatColl))
+
+    fmt.Println("starting autonomous message transmit and receive scenario.")
+
+    go func() {
+        for {
+            msg, err := sub.Recv()
+            if err != nil { continue }
+            content := string(msg.Bytes())
+            if len(content) > 6 {
+                fmt.Printf("p2p-recv::<<== %s\n", content[6:])
+            }
+        }
+    }()
+
+    for {
+        time.Sleep(2 * time.Second)
+        
+        msg := fmt.Sprintf("(%s,%s:ON)", userName, myIP)
+        push.Send(zmq4.NewMsgString(msg))
+        fmt.Println("p2p-send::==>>", msg)
+    }}
