@@ -2,33 +2,34 @@ package main
 
 import (
     "fmt"
-    "log"
     "os"
     "runtime"
-    "time"
 
     zmq "github.com/pebbe/zmq4"
 )
 
-func workerRoutine(id int, ctx *zmq.Context) {
+func ServerWorker(ctx *zmq.Context, id int) {
     worker, _ := ctx.NewSocket(zmq.DEALER)
     worker.Connect("inproc://backend")
-    fmt.Printf("Worker #%d started\n", id)
+    fmt.Printf("Worker#%d started\n", id)
 
     for {
         frames, _ := worker.RecvMessage(0)
+        if len(frames) < 2 {
+            continue
+        }
+
         ident := frames[0]
         msg := frames[1]
 
-        fmt.Printf("Worker #%d received '%s' from %s\n", id, msg, ident)
+        fmt.Printf("Worker#%d received %s from %s\n", id, msg, ident)
         worker.SendMessage(ident, msg)
     }
+
+    worker.Close()
 }
 
-func main() {
-    runtime.GOMAXPROCS(runtime.NumCPU())
-    numWorkers := 0
-    fmt.Sscanf(os.Args[1], "%d", &numWorkers)
+func ServerTask(numServer int) {
     ctx, _ := zmq.NewContext()
 
     frontend, _ := ctx.NewSocket(zmq.ROUTER)
@@ -37,12 +38,19 @@ func main() {
     backend, _ := ctx.NewSocket(zmq.DEALER)
     backend.Bind("inproc://backend")
 
-    for i := 0; i < numWorkers; i++ {
-        go workerRoutine(i, ctx)
+    for i := 0; i < numServer; i++ {
+        go ServerWorker(ctx, i)
     }
 
-    err := zmq.Proxy(frontend, backend, nil)
+    zmq.Proxy(frontend, backend, nil)
     frontend.Close()
     backend.Close()
     ctx.Term()
+}
+
+func main() {
+    runtime.GOMAXPROCS(runtime.NumCPU())
+    var num int
+    fmt.Sscanf(os.Args[1], "%d", &num)
+    ServerTask(num)
 }

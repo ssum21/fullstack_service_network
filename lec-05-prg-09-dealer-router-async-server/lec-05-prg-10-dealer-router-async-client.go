@@ -9,30 +9,36 @@ import (
 )
 
 func main() {
-	clientID := os.Args[1]
+	id := os.Args[1]
+    identity := id
     ctx, _ := zmq.NewContext()
     socket, _ := ctx.NewSocket(zmq.DEALER)
-    socket.SetIdentity(clientID)
+
+    socket.SetIdentity(identity)
     socket.Connect("tcp://localhost:5570")
+
+    fmt.Printf("Client %s started\n", identity)
 
     poller := zmq.NewPoller()
     poller.Add(socket, zmq.POLLIN)
 
-    req := 0
+    reqs := 0
+
     for {
-        req++
-        msg := fmt.Sprintf("request #%d", req)
-        fmt.Println(clientID, "sent:", msg)
+        reqs++
+        msg := fmt.Sprintf("request #%d", reqs)
+        fmt.Println("Req #", reqs, "sent..")
+
         socket.Send(msg, 0)
+
+        time.Sleep(1 * time.Second)
 
         polled, _ := poller.Poll(1 * time.Second)
         if len(polled) > 0 {
             reply, _ := socket.Recv(0)
-            fmt.Printf("%s received: %s\n", clientID, reply)
-        } else {
-            fmt.Println(clientID, "no reply (timeout)")
+            fmt.Printf("%s received: %s\n", identity, reply)
         }
-
-        time.Sleep(1 * time.Second)
     }
+    socket.Close()
+    ctx.Term()
 }
