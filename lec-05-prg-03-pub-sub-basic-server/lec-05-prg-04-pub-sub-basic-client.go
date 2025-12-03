@@ -31,6 +31,7 @@ func main() {
 	}
 	subscriber.SetSubscribe(filter)
 	update_nbr := 0
+	total_temp := 0
 	for update_nbr < 20 {
 
 		msg, _ := subscriber.Recv(0)
@@ -42,6 +43,9 @@ func main() {
 				strings.TrimSpace(filter), temperature)
 
 			update_nbr++
+			total_temp += temperature
 		}
 	}
+	fmt.Printf("Average temperature for zipcode '%s' was %dF \n\n", strings.TrimSpace(filter), total_temp/update_nbr)
+
 }
