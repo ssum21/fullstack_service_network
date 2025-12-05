@@ -33,7 +33,7 @@ func get_ip_mask(ip string) string {
 	return strings.Join(parts[:3], ".")
 }
 
-// Beacon Server (여기 있다고 알리기 역할)
+// Beacon Server
 func runBeaconServer(localIP, port string) {
 	pub := zmq4.NewPub(context.Background())
 	defer pub.Close()
@@ -51,7 +51,7 @@ func runBeaconServer(localIP, port string) {
 	}
 }
 
-// User Manager (유저 등록 요청 받기)
+// User Manager
 func runUserManager(localIP, port string) {
 	rep := zmq4.NewRep(context.Background())
 	defer rep.Close()
@@ -76,7 +76,7 @@ func runUserManager(localIP, port string) {
 	}
 }
 
-// Relay Server (중계 서버)
+// Relay Server
 func runRelayServer(localIP, pubPort, pullPort string) {
 	pub := zmq4.NewPub(context.Background())
 	defer pub.Close()
@@ -177,13 +177,13 @@ func main() {
 		fmt.Println("유저 등록 실패")
 	}
 
-	// SUB 소켓
+	// SUB
 	sub := zmq4.NewSub(context.Background())
 	defer sub.Close()
 	sub.Dial(fmt.Sprintf("tcp://%s:%s", p2pServerIP, portChatPub))
 	sub.SetOption(zmq4.OptionSubscribe, "RELAY")
 
-	// PUSH 소켓
+	// PUSH
 	push := zmq4.NewPush(context.Background())
 	defer push.Close()
 	push.Dial(fmt.Sprintf("tcp://%s:%s", p2pServerIP, portChatColl))
@@ -204,13 +204,11 @@ func main() {
 		}
 	}()
 
-	// Python과 동일한 메인 루프
 	rand.Seed(time.Now().UnixNano())
 
 	for {
 		select {
 		case content := <-msgChan:
-			// 메시지 수신됨
 			if len(content) > 6 {
 				parts := strings.Split(content, ":")
 				if len(parts) >= 3 {
@@ -220,8 +218,7 @@ func main() {
 				}
 			}
 		case <-time.After(100 * time.Millisecond):
-			// 100ms 타임아웃 (poll과 동일)
-			r := rand.Intn(100) + 1 // 1~100
+			r := rand.Intn(100) + 1  // 100ms 타임아웃
 			if r < 10 {
 				time.Sleep(3 * time.Second)
 				msg := fmt.Sprintf("(%s,%s:ON)", userName, myIP)
